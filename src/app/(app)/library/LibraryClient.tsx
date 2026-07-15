@@ -18,47 +18,56 @@ type Bookmark = {
   collectionId: string | null;
 };
 
-type Collection = { id: string; name: string };
+type Collection = { id: string; name: string; parentId?: string | null };
 
 export default function LibraryClient() {
   const sp = useSearchParams();
   const view = sp.get("view");
   const collectionId = sp.get("collectionId");
+  const initialQ = sp.get("q") || "";
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [collections, setCollections] = useState<Collection[]>([]);
   const [tagId, setTagId] = useState<string>("");
   const [layout, setLayout] = useState<"grid" | "list">("grid");
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(initialQ);
   const [url, setUrl] = useState("");
   const [selected, setSelected] = useState<Bookmark | null>(null);
+  const [checked, setChecked] = useState<Set<string>>(new Set());
   const [htmlPaste, setHtmlPaste] = useState("");
   const [busy, setBusy] = useState(false);
+  const [bulkTag, setBulkTag] = useState("");
+  const [bulkCollection, setBulkCollection] = useState("");
 
-  const query = useMemo(() => {
+  const listQuery = useMemo(() => {
     const p = new URLSearchParams();
     if (view) p.set("view", view);
     if (collectionId) p.set("collectionId", collectionId);
     if (tagId) p.set("tagId", tagId);
-    if (q.trim()) p.set("q", q.trim());
     return p.toString();
-  }, [view, collectionId, tagId, q]);
+  }, [view, collectionId, tagId]);
 
   async function load() {
     const [b, t, c] = await Promise.all([
-      fetch(`/api/bookmarks?${query}`).then((r) => r.json()),
+      fetch(`/api/bookmarks?${listQuery}`).then((r) => r.json()),
       fetch("/api/tags").then((r) => r.json()),
       fetch("/api/collections").then((r) => r.json()),
     ]);
     setBookmarks(b.bookmarks || []);
     setTags(t.tags || []);
     setCollections(c.collections || []);
+    setChecked(new Set());
   }
 
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query]);
+  }, [listQuery]);
+
+  useEffect(() => {
+    if (initialQ) void searchAi(initialQ);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function addBookmark() {
     if (!url.trim()) return;
@@ -95,6 +104,19 @@ export default function LibraryClient() {
     await load();
   }
 
+  async function reindexScope(scope: "all" | "collection" | "tag") {
+    await fetch("/api/reindex", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        scope,
+        collectionId: collectionId || undefined,
+        tagId: tagId || undefined,
+      }),
+    });
+    await load();
+  }
+
   async function submitHtml() {
     if (!selected || !htmlPaste.trim()) return;
     setBusy(true);
@@ -108,12 +130,12 @@ export default function LibraryClient() {
     await load();
   }
 
-  async function searchAi() {
-    if (!q.trim()) {
+  async function searchAi(term = q) {
+    if (!term.trim()) {
       await load();
       return;
     }
-    const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+    const res = await fetch(`/api/search?q=${encodeURIComponent(term)}`);
     const data = await res.json();
     setBookmarks(
       (data.results || []).map((b: Bookmark) => ({
@@ -121,6 +143,33 @@ export default function LibraryClient() {
         tags: b.tags || [],
       })),
     );
+  }
+
+  function toggleCheck(id: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    setChecked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function bulk(action: string) {
+    if (!checked.size) return;
+    setBusy(true);
+    await fetch("/api/bookmarks/bulk", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ids: [...checked],
+        action,
+        collectionId: bulkCollection || null,
+        tag: bulkTag || undefined,
+      }),
+    });
+    setBusy(false);
+    await load();
   }
 
   return (
@@ -143,7 +192,7 @@ export default function LibraryClient() {
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && void searchAi()}
         />
-        <button className="fm-btn" onClick={searchAi}>
+        <button className="fm-btn" onClick={() => void searchAi()}>
           Search
         </button>
         <button
@@ -164,7 +213,78 @@ export default function LibraryClient() {
             </option>
           ))}
         </select>
+        <button className="fm-btn" onClick={() => void reindexScope("all")}>
+          Reindex all
+        </button>
+        {collectionId ? (
+          <button
+            className="fm-btn"
+            onClick={() => void reindexScope("collection")}
+          >
+            Reindex collection
+          </button>
+        ) : null}
+        {tagId ? (
+          <button className="fm-btn" onClick={() => void reindexScope("tag")}>
+            Reindex tag
+          </button>
+        ) : null}
       </div>
+
+      {checked.size > 0 ? (
+        <div
+          className="fm-card p-3 flex flex-wrap gap-2 items-center text-sm"
+        >
+          <span>{checked.size} selected</span>
+          <button className="fm-btn" disabled={busy} onClick={() => void bulk("favorite")}>
+            Favorite
+          </button>
+          <button className="fm-btn" disabled={busy} onClick={() => void bulk("read_later")}>
+            Read later
+          </button>
+          <button className="fm-btn" disabled={busy} onClick={() => void bulk("reindex")}>
+            Reindex
+          </button>
+          <select
+            className="fm-input max-w-[10rem]"
+            value={bulkCollection}
+            onChange={(e) => setBulkCollection(e.target.value)}
+          >
+            <option value="">Move to…</option>
+            {collections.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          <button
+            className="fm-btn"
+            disabled={busy || !bulkCollection}
+            onClick={() => void bulk("move_collection")}
+          >
+            Move
+          </button>
+          <input
+            className="fm-input max-w-[8rem]"
+            placeholder="Tag"
+            value={bulkTag}
+            onChange={(e) => setBulkTag(e.target.value)}
+          />
+          <button
+            className="fm-btn"
+            disabled={busy || !bulkTag.trim()}
+            onClick={() => void bulk("add_tag")}
+          >
+            Add tag
+          </button>
+          <button className="fm-btn" disabled={busy} onClick={() => void bulk("delete")}>
+            Delete
+          </button>
+          <button className="fm-btn" onClick={() => setChecked(new Set())}>
+            Clear
+          </button>
+        </div>
+      ) : null}
 
       <div
         className={
@@ -180,6 +300,13 @@ export default function LibraryClient() {
             onClick={() => setSelected(b)}
           >
             <div className="flex gap-3 items-start w-full">
+              <input
+                type="checkbox"
+                checked={checked.has(b.id)}
+                onClick={(e) => toggleCheck(b.id, e)}
+                onChange={() => undefined}
+                className="mt-1"
+              />
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={b.faviconUrl || "/logo.svg"}

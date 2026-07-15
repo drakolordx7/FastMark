@@ -47,6 +47,8 @@ services:
       COOKIE_SECURE: ${COOKIE_SECURE:-auto}
       ENCRYPTION_SECRET: ${ENCRYPTION_SECRET:-dev-encryption-secret-change-me}
       AUTH_SECRET: ${AUTH_SECRET:-dev-auth-secret-change-me}
+    volumes:
+      - fastmark_uploads:/app/public/uploads
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -73,3 +75,4 @@ services:
 
 volumes:
   fastmark_pg:
+  fastmark_uploads:

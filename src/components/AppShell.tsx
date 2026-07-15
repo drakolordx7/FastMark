@@ -10,12 +10,50 @@ type Me = {
   settings: { logoUrl: string; theme: string };
 };
 
+type CollectionNode = {
+  id: string;
+  name: string;
+  parentId?: string | null;
+};
+
+function CollectionTree({
+  collections,
+  parentId = null,
+  depth = 0,
+}: {
+  collections: CollectionNode[];
+  parentId?: string | null;
+  depth?: number;
+}) {
+  const kids = collections.filter((c) => (c.parentId ?? null) === parentId);
+  return (
+    <>
+      {kids.map((c) => (
+        <div key={c.id}>
+          <Link
+            href={`/library?collectionId=${c.id}`}
+            className="block rounded-lg px-3 py-2 hover:bg-white/10"
+            style={{ paddingLeft: `${0.75 + depth * 0.75}rem` }}
+          >
+            {c.name}
+          </Link>
+          <CollectionTree
+            collections={collections}
+            parentId={c.id}
+            depth={depth + 1}
+          />
+        </div>
+      ))}
+    </>
+  );
+}
+
 export function AppShell({
   children,
   collections,
 }: {
   children: ReactNode;
-  collections: { id: string; name: string }[];
+  collections: CollectionNode[];
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -67,6 +105,7 @@ export function AppShell({
             alt="FastMark"
             width={32}
             height={32}
+            unoptimized
           />
           <div>
             <div className="font-semibold tracking-tight">FastMark</div>
@@ -96,15 +135,7 @@ export function AppShell({
           Collections
         </div>
         <nav className="space-y-1 text-sm flex-1 overflow-auto">
-          {collections.map((c) => (
-            <Link
-              key={c.id}
-              href={`/library?collectionId=${c.id}`}
-              className="block rounded-lg px-3 py-2 hover:bg-white/10"
-            >
-              {c.name}
-            </Link>
-          ))}
+          <CollectionTree collections={collections} />
         </nav>
 
         <div className="space-y-1 text-sm">

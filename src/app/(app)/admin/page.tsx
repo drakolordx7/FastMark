@@ -34,6 +34,13 @@ export default function AdminPage() {
   const [globalKey, setGlobalKey] = useState("");
   const [newUser, setNewUser] = useState({ username: "", password: "" });
   const [msg, setMsg] = useState("");
+  const [queue, setQueue] = useState<{
+    waiting: number;
+    active: number;
+    completed: number;
+    failed: number;
+    delayed: number;
+  } | null>(null);
 
   async function load() {
     const res = await fetch("/api/admin");
@@ -45,6 +52,8 @@ export default function AdminPage() {
     setUsers(data.users || []);
     setUsage(data.usage || []);
     setSystem(data.system);
+    const q = await fetch("/api/admin/queue").then((r) => r.json());
+    if (q.queue) setQueue(q.queue);
   }
 
   useEffect(() => {
@@ -262,8 +271,51 @@ export default function AdminPage() {
           value={system.logoUrl}
           onChange={(e) => setSystem({ ...system, logoUrl: e.target.value })}
         />
+        <label className="block text-sm space-y-1">
+          <span>Upload system logo</span>
+          <input
+            className="fm-input"
+            type="file"
+            accept="image/*,.svg"
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              const form = new FormData();
+              form.append("file", file);
+              form.append("scope", "system");
+              const res = await fetch("/api/logo", { method: "POST", body: form });
+              const data = await res.json();
+              if (res.ok) {
+                setSystem({ ...system, logoUrl: data.logoUrl });
+                setMsg("System logo uploaded");
+              } else {
+                setMsg(data.error || "Upload failed");
+              }
+            }}
+          />
+        </label>
         <button className="fm-btn fm-btn-primary">Save system</button>
       </form>
+
+      <section className="fm-card p-5 space-y-3">
+        <h2 className="font-medium">Index queue</h2>
+        {queue ? (
+          <div className="text-sm grid grid-cols-2 sm:grid-cols-5 gap-2">
+            <div>waiting: {queue.waiting}</div>
+            <div>active: {queue.active}</div>
+            <div>delayed: {queue.delayed}</div>
+            <div>completed: {queue.completed}</div>
+            <div>failed: {queue.failed}</div>
+          </div>
+        ) : (
+          <p className="text-sm" style={{ color: "var(--muted)" }}>
+            Queue unavailable
+          </p>
+        )}
+        <button className="fm-btn" type="button" onClick={() => void load()}>
+          Refresh
+        </button>
+      </section>
 
       <section className="fm-card p-5 space-y-3">
         <h2 className="font-medium">Usage (recent)</h2>

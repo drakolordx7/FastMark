@@ -19,7 +19,13 @@ export default async function AppLayout({
     .orderBy(asc(collections.position), asc(collections.name));
 
   return (
-    <AppShell collections={cols.map((c) => ({ id: c.id, name: c.name }))}>
+    <AppShell
+      collections={cols.map((c) => ({
+        id: c.id,
+        name: c.name,
+        parentId: c.parentId,
+      }))}
+    >
       {children}
     </AppShell>
   );

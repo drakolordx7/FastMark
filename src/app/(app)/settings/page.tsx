@@ -12,17 +12,28 @@ type Settings = {
   logoUrl: string;
 };
 
+type Collection = {
+  id: string;
+  name: string;
+  parentId: string | null;
+};
+
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [apiKey, setApiKey] = useState("");
   const [message, setMessage] = useState("");
   const [collectionName, setCollectionName] = useState("");
+  const [parentId, setParentId] = useState("");
+  const [collections, setCollections] = useState<Collection[]>([]);
   const [importResult, setImportResult] = useState("");
 
   async function load() {
-    const res = await fetch("/api/settings");
-    const data = await res.json();
-    setSettings(data.settings);
+    const [s, c] = await Promise.all([
+      fetch("/api/settings").then((r) => r.json()),
+      fetch("/api/collections").then((r) => r.json()),
+    ]);
+    setSettings(s.settings);
+    setCollections(c.collections || []);
   }
 
   useEffect(() => {
@@ -51,15 +62,56 @@ export default function SettingsPage() {
     document.documentElement.classList.toggle("dark", dark);
   }
 
+  async function uploadLogo(file: File | null) {
+    if (!file) return;
+    const form = new FormData();
+    form.append("file", file);
+    form.append("scope", "user");
+    const res = await fetch("/api/logo", { method: "POST", body: form });
+    const data = await res.json();
+    if (res.ok && settings) {
+      setSettings({ ...settings, logoUrl: data.logoUrl });
+      setMessage("Logo uploaded");
+    } else {
+      setMessage(data.error || "Upload failed");
+    }
+  }
+
   async function addCollection() {
     if (!collectionName.trim()) return;
     await fetch("/api/collections", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: collectionName }),
+      body: JSON.stringify({
+        name: collectionName,
+        parentId: parentId || null,
+      }),
     });
     setCollectionName("");
+    setParentId("");
     setMessage("Collection created");
+    await load();
+  }
+
+  async function renameCollection(id: string, name: string) {
+    const next = prompt("Rename collection", name);
+    if (!next?.trim()) return;
+    await fetch("/api/collections", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, name: next.trim() }),
+    });
+    await load();
+  }
+
+  async function deleteCollection(id: string) {
+    if (!confirm("Delete this collection?")) return;
+    await fetch("/api/collections", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    await load();
   }
 
   async function onImport(file: File | null) {
@@ -86,7 +138,11 @@ export default function SettingsPage() {
   }
 
   if (!settings) {
-    return <div className="text-sm" style={{ color: "var(--muted)" }}>Loading…</div>;
+    return (
+      <div className="text-sm" style={{ color: "var(--muted)" }}>
+        Loading…
+      </div>
+    );
   }
 
   return (
@@ -94,7 +150,7 @@ export default function SettingsPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
         <p className="text-sm" style={{ color: "var(--muted)" }}>
-          AI credentials, theme, timezone, and imports
+          AI credentials, theme, timezone, logo, and imports
         </p>
       </div>
 
@@ -172,7 +228,7 @@ export default function SettingsPage() {
           </select>
         </label>
         <label className="block text-sm space-y-1">
-          <span>Logo URL (placeholder path or uploaded URL)</span>
+          <span>Logo URL</span>
           <input
             className="fm-input"
             value={settings.logoUrl}
@@ -180,6 +236,15 @@ export default function SettingsPage() {
               setSettings({ ...settings, logoUrl: e.target.value })
             }
             placeholder="/logo.svg"
+          />
+        </label>
+        <label className="block text-sm space-y-1">
+          <span>Upload logo (swap placeholder)</span>
+          <input
+            className="fm-input"
+            type="file"
+            accept="image/*,.svg"
+            onChange={(e) => void uploadLogo(e.target.files?.[0] || null)}
           />
         </label>
         <button className="fm-btn fm-btn-primary" type="submit">
@@ -194,17 +259,65 @@ export default function SettingsPage() {
 
       <section className="fm-card p-5 space-y-3">
         <h2 className="font-medium">Collections</h2>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <input
-            className="fm-input"
+            className="fm-input max-w-xs"
             value={collectionName}
             onChange={(e) => setCollectionName(e.target.value)}
             placeholder="New collection name"
           />
+          <select
+            className="fm-input max-w-[12rem]"
+            value={parentId}
+            onChange={(e) => setParentId(e.target.value)}
+          >
+            <option value="">No parent (top level)</option>
+            {collections.map((c) => (
+              <option key={c.id} value={c.id}>
+                Child of {c.name}
+              </option>
+            ))}
+          </select>
           <button className="fm-btn" type="button" onClick={addCollection}>
             Add
           </button>
         </div>
+        <ul className="text-sm space-y-2">
+          {collections.map((c) => (
+            <li
+              key={c.id}
+              className="flex items-center justify-between gap-2 border-b py-1"
+              style={{ borderColor: "var(--border)" }}
+            >
+              <span>
+                {c.name}
+                {c.parentId ? (
+                  <span className="opacity-60 text-xs">
+                    {" "}
+                    · nested under{" "}
+                    {collections.find((p) => p.id === c.parentId)?.name || "…"}
+                  </span>
+                ) : null}
+              </span>
+              <span className="flex gap-2">
+                <button
+                  className="fm-btn"
+                  type="button"
+                  onClick={() => void renameCollection(c.id, c.name)}
+                >
+                  Rename
+                </button>
+                <button
+                  className="fm-btn"
+                  type="button"
+                  onClick={() => void deleteCollection(c.id)}
+                >
+                  Delete
+                </button>
+              </span>
+            </li>
+          ))}
+        </ul>
       </section>
 
       <section className="fm-card p-5 space-y-3">
