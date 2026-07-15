@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "FastMark",
+  "version": "0.1.0",
+  "description": "Save and search FastMark bookmarks",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "fastmark@local",
+      "strict_min_version": "109.0"
+    }
+  },
+  "action": {
+    "default_title": "FastMark",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "48": "icon-48.png"
+    }
+  },
+  "background": {
+    "scripts": ["background.js"],
+    "service_worker": "background.js"
+  },
+  "permissions": ["storage", "activeTab", "contextMenus", "scripting"],
+  "host_permissions": ["<all_urls>"],
+  "icons": {
+    "48": "icon-48.png"
+  }
+}

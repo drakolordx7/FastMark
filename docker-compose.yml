@@ -1,0 +1,75 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: fastmark
+      POSTGRES_PASSWORD: fastmark
+      POSTGRES_DB: fastmark
+    volumes:
+      - fastmark_pg:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fastmark -d fastmark"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  migrate:
+    build: .
+    command: ["npx", "tsx", "src/lib/db/migrate.ts"]
+    environment:
+      DATABASE_URL: postgres://fastmark:fastmark@postgres:5432/fastmark
+      ENCRYPTION_SECRET: ${ENCRYPTION_SECRET:-dev-encryption-secret-change-me}
+      AUTH_SECRET: ${AUTH_SECRET:-dev-auth-secret-change-me}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgres://fastmark:fastmark@postgres:5432/fastmark
+      REDIS_URL: redis://redis:6379
+      APP_URL: ${APP_URL:-http://localhost:3000}
+      COOKIE_SECURE: ${COOKIE_SECURE:-auto}
+      ENCRYPTION_SECRET: ${ENCRYPTION_SECRET:-dev-encryption-secret-change-me}
+      AUTH_SECRET: ${AUTH_SECRET:-dev-auth-secret-change-me}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+  worker:
+    build: .
+    command: ["npx", "tsx", "src/worker/index.ts"]
+    environment:
+      DATABASE_URL: postgres://fastmark:fastmark@postgres:5432/fastmark
+      REDIS_URL: redis://redis:6379
+      ENCRYPTION_SECRET: ${ENCRYPTION_SECRET:-dev-encryption-secret-change-me}
+      AUTH_SECRET: ${AUTH_SECRET:-dev-auth-secret-change-me}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+volumes:
+  fastmark_pg:

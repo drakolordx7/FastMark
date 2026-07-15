@@ -1,0 +1,119 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #f3f6f4;
+  --bg-elevated: #ffffff;
+  --fg: #14201c;
+  --muted: #5b6b64;
+  --border: #d5ded9;
+  --accent: #0f766e;
+  --accent-soft: #d8f3ef;
+  --danger: #b42318;
+  --warning: #b54708;
+  --sidebar: #0b1f1c;
+  --sidebar-fg: #e7f0ed;
+  --card: #ffffff;
+  --shadow: 0 1px 2px rgba(15, 30, 25, 0.06);
+}
+
+.dark {
+  --bg: #0c1210;
+  --bg-elevated: #151c19;
+  --fg: #e8efeb;
+  --muted: #93a39b;
+  --border: #2a3631;
+  --accent: #2dd4bf;
+  --accent-soft: #16352f;
+  --danger: #f97066;
+  --warning: #fdb022;
+  --sidebar: #080f0d;
+  --sidebar-fg: #dce8e3;
+  --card: #151c19;
+  --shadow: none;
+}
+
+@theme inline {
+  --font-sans: var(--font-outfit);
+  --font-mono: var(--font-jetbrains);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-outfit), "Segoe UI", sans-serif;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+.fm-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+
+.fm-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--fg);
+  padding: 0.45rem 0.8rem;
+  cursor: pointer;
+}
+
+.fm-btn:hover {
+  border-color: var(--accent);
+}
+
+.fm-btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.dark .fm-btn-primary {
+  color: #06201c;
+}
+
+.fm-input {
+  width: 100%;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--fg);
+  border-radius: 8px;
+  padding: 0.55rem 0.75rem;
+}
+
+.fm-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.75rem;
+}
