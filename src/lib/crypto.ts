@@ -1,9 +1,14 @@
 import { createHash, createCipheriv, createDecipheriv, randomBytes, scryptSync } from "crypto";
 
 function getSecret() {
-  const secret = process.env.ENCRYPTION_SECRET;
+  const secret =
+    process.env.ENCRYPTION_SECRET?.trim() ||
+    process.env.AUTH_SECRET?.trim() ||
+    "";
   if (!secret || secret.length < 16) {
-    throw new Error("ENCRYPTION_SECRET must be set (min 16 chars)");
+    throw new Error(
+      "ENCRYPTION_SECRET must be set to at least 16 characters (required to save API keys)",
+    );
   }
   return secret;
 }

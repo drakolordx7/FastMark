@@ -64,9 +64,9 @@ const systemSchema = z.object({
   clearGlobalApiKey: z.boolean().optional(),
   globalOpenaiModel: z.string().optional(),
   globalEmbeddingModel: z.string().optional(),
-  crawlMaxHtmlBytes: z.number().int().optional(),
-  crawlMaxTextChars: z.number().int().optional(),
-  crawlTimeoutMs: z.number().int().optional(),
+  crawlMaxHtmlBytes: z.coerce.number().int().optional(),
+  crawlMaxTextChars: z.coerce.number().int().optional(),
+  crawlTimeoutMs: z.coerce.number().int().optional(),
   logoUrl: z.string().optional(),
 });
 
@@ -103,38 +103,53 @@ export async function POST(req: NextRequest) {
       return jsonOk({ ok: true });
     }
     if (raw.action === "system") {
-      const body = systemSchema.parse(raw);
+      const body = systemSchema.parse({
+        action: "system",
+        globalOpenaiBaseUrl: raw.globalOpenaiBaseUrl,
+        globalOpenaiApiKey: raw.globalOpenaiApiKey,
+        clearGlobalApiKey: raw.clearGlobalApiKey,
+        globalOpenaiModel: raw.globalOpenaiModel,
+        globalEmbeddingModel: raw.globalEmbeddingModel,
+        crawlMaxHtmlBytes: raw.crawlMaxHtmlBytes,
+        crawlMaxTextChars: raw.crawlMaxTextChars,
+        crawlTimeoutMs: raw.crawlTimeoutMs,
+        logoUrl: raw.logoUrl,
+      });
       const [sys] = await db.select().from(systemSettings).limit(1);
       let keyEnc = sys?.globalOpenaiApiKeyEncrypted ?? null;
       if (body.clearGlobalApiKey) keyEnc = null;
-      if (body.globalOpenaiApiKey) {
-        keyEnc = encryptSecret(body.globalOpenaiApiKey);
+      if (typeof body.globalOpenaiApiKey === "string" && body.globalOpenaiApiKey.trim()) {
+        keyEnc = encryptSecret(body.globalOpenaiApiKey.trim());
       }
+      const patch = {
+        globalOpenaiBaseUrl:
+          body.globalOpenaiBaseUrl !== undefined
+            ? body.globalOpenaiBaseUrl.trim() || null
+            : sys?.globalOpenaiBaseUrl ?? null,
+        globalOpenaiApiKeyEncrypted: keyEnc,
+        globalOpenaiModel:
+          body.globalOpenaiModel !== undefined
+            ? body.globalOpenaiModel.trim() || null
+            : sys?.globalOpenaiModel ?? null,
+        globalEmbeddingModel:
+          body.globalEmbeddingModel !== undefined
+            ? body.globalEmbeddingModel.trim() || null
+            : sys?.globalEmbeddingModel ?? null,
+        crawlMaxHtmlBytes:
+          body.crawlMaxHtmlBytes ?? sys?.crawlMaxHtmlBytes ?? 2_000_000,
+        crawlMaxTextChars:
+          body.crawlMaxTextChars ?? sys?.crawlMaxTextChars ?? 500_000,
+        crawlTimeoutMs: body.crawlTimeoutMs ?? sys?.crawlTimeoutMs ?? 20_000,
+        logoUrl: body.logoUrl ?? sys?.logoUrl ?? "/logo.svg",
+        updatedAt: new Date(),
+      };
       await db
-        .update(systemSettings)
-        .set({
-          globalOpenaiBaseUrl:
-            body.globalOpenaiBaseUrl !== undefined
-              ? body.globalOpenaiBaseUrl.trim() || null
-              : sys?.globalOpenaiBaseUrl,
-          globalOpenaiApiKeyEncrypted: keyEnc,
-          globalOpenaiModel:
-            body.globalOpenaiModel !== undefined
-              ? body.globalOpenaiModel.trim() || null
-              : sys?.globalOpenaiModel,
-          globalEmbeddingModel:
-            body.globalEmbeddingModel !== undefined
-              ? body.globalEmbeddingModel.trim() || null
-              : sys?.globalEmbeddingModel,
-          crawlMaxHtmlBytes:
-            body.crawlMaxHtmlBytes ?? sys?.crawlMaxHtmlBytes ?? 2_000_000,
-          crawlMaxTextChars:
-            body.crawlMaxTextChars ?? sys?.crawlMaxTextChars ?? 500_000,
-          crawlTimeoutMs: body.crawlTimeoutMs ?? sys?.crawlTimeoutMs ?? 20_000,
-          logoUrl: body.logoUrl ?? sys?.logoUrl ?? "/logo.svg",
-          updatedAt: new Date(),
-        })
-        .where(eq(systemSettings.id, 1));
+        .insert(systemSettings)
+        .values({ id: 1, ...patch })
+        .onConflictDoUpdate({
+          target: systemSettings.id,
+          set: patch,
+        });
       return jsonOk({ ok: true });
     }
     return jsonError("Unknown action");

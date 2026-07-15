@@ -74,17 +74,24 @@ export default function AdminPage() {
 
   async function saveSystem(e: FormEvent) {
     e.preventDefault();
-    await fetch("/api/admin", {
+    const res = await fetch("/api/admin", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         action: "system",
-        ...system,
-        globalOpenaiApiKey: globalKey || undefined,
+        globalOpenaiBaseUrl: system.globalOpenaiBaseUrl,
+        globalOpenaiModel: system.globalOpenaiModel,
+        globalEmbeddingModel: system.globalEmbeddingModel,
+        crawlMaxHtmlBytes: system.crawlMaxHtmlBytes,
+        crawlMaxTextChars: system.crawlMaxTextChars,
+        crawlTimeoutMs: system.crawlTimeoutMs,
+        logoUrl: system.logoUrl,
+        globalOpenaiApiKey: globalKey.trim() || undefined,
       }),
     });
-    setGlobalKey("");
-    setMsg("System settings saved");
+    const data = await res.json().catch(() => ({}));
+    setMsg(res.ok ? "System settings saved" : data.error || "Failed to save");
+    if (res.ok) setGlobalKey("");
     await load();
   }
 

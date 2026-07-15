@@ -46,7 +46,19 @@ const schema = z.object({
 export async function PUT(req: NextRequest) {
   try {
     const user = await requireUser();
-    const body = schema.parse(await req.json());
+    const raw = await req.json();
+    // Ignore client-only fields like hasApiKey
+    const body = schema.parse({
+      openaiBaseUrl: raw.openaiBaseUrl,
+      openaiApiKey: raw.openaiApiKey,
+      clearApiKey: raw.clearApiKey,
+      openaiModel: raw.openaiModel,
+      embeddingModel: raw.embeddingModel,
+      timezone: raw.timezone,
+      theme: raw.theme,
+      logoUrl: raw.logoUrl,
+    });
+
     const [existing] = await db
       .select()
       .from(userSettings)
@@ -55,12 +67,11 @@ export async function PUT(req: NextRequest) {
 
     let keyEnc = existing?.openaiApiKeyEncrypted ?? null;
     if (body.clearApiKey) keyEnc = null;
-    if (body.openaiApiKey !== undefined && body.openaiApiKey !== "") {
-      keyEnc = encryptSecret(body.openaiApiKey);
+    if (typeof body.openaiApiKey === "string" && body.openaiApiKey.trim()) {
+      keyEnc = encryptSecret(body.openaiApiKey.trim());
     }
 
-    const values = {
-      userId: user.id,
+    const patch = {
       openaiBaseUrl:
         body.openaiBaseUrl !== undefined
           ? body.openaiBaseUrl.trim() || null
@@ -74,21 +85,20 @@ export async function PUT(req: NextRequest) {
         body.embeddingModel !== undefined
           ? body.embeddingModel.trim() || null
           : existing?.embeddingModel ?? null,
-      timezone: body.timezone ?? existing?.timezone ?? "America/Chicago",
+      timezone: body.timezone?.trim() || existing?.timezone || "America/Chicago",
       theme: body.theme ?? existing?.theme ?? "system",
       logoUrl:
         body.logoUrl !== undefined ? body.logoUrl : existing?.logoUrl ?? null,
       updatedAt: new Date(),
     };
 
-    if (existing) {
-      await db
-        .update(userSettings)
-        .set(values)
-        .where(eq(userSettings.userId, user.id));
-    } else {
-      await db.insert(userSettings).values(values);
-    }
+    await db
+      .insert(userSettings)
+      .values({ userId: user.id, ...patch })
+      .onConflictDoUpdate({
+        target: userSettings.userId,
+        set: patch,
+      });
 
     return jsonOk({ ok: true });
   } catch (err) {

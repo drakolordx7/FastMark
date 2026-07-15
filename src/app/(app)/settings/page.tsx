@@ -47,12 +47,18 @@ export default function SettingsPage() {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        ...settings,
-        openaiApiKey: apiKey || undefined,
+        openaiBaseUrl: settings.openaiBaseUrl,
+        openaiModel: settings.openaiModel,
+        embeddingModel: settings.embeddingModel,
+        timezone: settings.timezone,
+        theme: settings.theme,
+        logoUrl: settings.logoUrl,
+        openaiApiKey: apiKey.trim() || undefined,
       }),
     });
-    setMessage(res.ok ? "Saved" : "Failed to save");
-    setApiKey("");
+    const data = await res.json().catch(() => ({}));
+    setMessage(res.ok ? "Saved" : data.error || "Failed to save");
+    if (res.ok) setApiKey("");
     await load();
     const theme = settings.theme;
     const dark =
