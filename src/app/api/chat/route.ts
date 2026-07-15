@@ -1,15 +1,13 @@
 import { NextRequest } from "next/server";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
-  bookmarkTags,
   bookmarks,
   chatMessages,
   chatSessions,
   collections,
-  tags,
 } from "@/lib/db/schema";
 import type { Proposal } from "@/lib/proposals";
 import {

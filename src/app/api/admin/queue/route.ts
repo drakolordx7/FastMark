@@ -1,9 +1,8 @@
-import { NextRequest } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { getIndexQueue } from "@/lib/queue";
 import { handleRouteError, jsonOk } from "@/lib/api";
 
-export async function GET(_req: NextRequest) {
+export async function GET() {
   try {
     await requireAdmin();
     const queue = getIndexQueue();

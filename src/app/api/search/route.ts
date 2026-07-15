@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { and, eq, sql, inArray } from "drizzle-orm";
 import { requireUser, getUserFromToken, AuthError } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { bookmarks, embeddings } from "@/lib/db/schema";
+import { bookmarks } from "@/lib/db/schema";
 import { embedText } from "@/lib/ai";
 import { handleRouteError, jsonOk } from "@/lib/api";
 

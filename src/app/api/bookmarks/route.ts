@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { requireUser, getUserFromToken, AuthError } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -56,12 +56,10 @@ export async function GET(req: NextRequest) {
     }
 
     if (q) {
-      const pattern = `%${q.toLowerCase()}%`;
       rows = rows.filter((b) => {
         const hay = `${b.title ?? ""} ${b.summary ?? ""} ${b.url} ${b.contentText ?? ""}`.toLowerCase();
         return hay.includes(q.toLowerCase()) || b.url.toLowerCase().includes(q.toLowerCase());
       });
-      void pattern;
     }
 
     const ids = rows.map((r) => r.id);
