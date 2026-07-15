@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { systemSettings, userSettings } from "@/lib/db/schema";
 import { encryptSecret } from "@/lib/crypto";
+import { testAiConnection } from "@/lib/ai";
 import { handleRouteError, jsonOk } from "@/lib/api";
 
 export async function GET() {
@@ -25,6 +26,10 @@ export async function GET() {
         timezone: settings?.timezone ?? "America/Chicago",
         theme: settings?.theme ?? "system",
         logoUrl: settings?.logoUrl || sys?.logoUrl || "/logo.svg",
+        maxAiTags: settings?.maxAiTags ?? 5,
+        cleanTitles: settings?.cleanTitles ?? true,
+        allowDynamicCollections: settings?.allowDynamicCollections ?? true,
+        pageSize: settings?.pageSize ?? 50,
       },
     });
   } catch (err) {
@@ -41,13 +46,17 @@ const schema = z.object({
   timezone: z.string().optional(),
   theme: z.enum(["system", "light", "dark"]).optional(),
   logoUrl: z.string().nullable().optional(),
+  maxAiTags: z.number().int().min(0).max(5).optional(),
+  cleanTitles: z.boolean().optional(),
+  allowDynamicCollections: z.boolean().optional(),
+  pageSize: z.number().int().min(10).max(100).optional(),
+  testAi: z.boolean().optional(),
 });
 
 export async function PUT(req: NextRequest) {
   try {
     const user = await requireUser();
     const raw = await req.json();
-    // Ignore client-only fields like hasApiKey
     const body = schema.parse({
       openaiBaseUrl: raw.openaiBaseUrl,
       openaiApiKey: raw.openaiApiKey,
@@ -57,7 +66,17 @@ export async function PUT(req: NextRequest) {
       timezone: raw.timezone,
       theme: raw.theme,
       logoUrl: raw.logoUrl,
+      maxAiTags: raw.maxAiTags,
+      cleanTitles: raw.cleanTitles,
+      allowDynamicCollections: raw.allowDynamicCollections,
+      pageSize: raw.pageSize,
+      testAi: raw.testAi,
     });
+
+    if (body.testAi) {
+      const result = await testAiConnection(user.id);
+      return jsonOk({ test: result });
+    }
 
     const [existing] = await db
       .select()
@@ -89,6 +108,13 @@ export async function PUT(req: NextRequest) {
       theme: body.theme ?? existing?.theme ?? "system",
       logoUrl:
         body.logoUrl !== undefined ? body.logoUrl : existing?.logoUrl ?? null,
+      maxAiTags: body.maxAiTags ?? existing?.maxAiTags ?? 5,
+      cleanTitles: body.cleanTitles ?? existing?.cleanTitles ?? true,
+      allowDynamicCollections:
+        body.allowDynamicCollections ??
+        existing?.allowDynamicCollections ??
+        true,
+      pageSize: body.pageSize ?? existing?.pageSize ?? 50,
       updatedAt: new Date(),
     };
 

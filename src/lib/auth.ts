@@ -114,6 +114,7 @@ export async function seedUserDefaults(userId: string) {
       userId,
       name,
       position,
+      kind: "static" as const,
     })),
   );
 }

@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { and, eq, sql, inArray } from "drizzle-orm";
 import { requireUser, getUserFromToken, AuthError } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { bookmarks } from "@/lib/db/schema";
+import { bookmarkTags, bookmarks, tags } from "@/lib/db/schema";
 import { embedText } from "@/lib/ai";
 import { handleRouteError, jsonOk } from "@/lib/api";
 
@@ -91,11 +91,35 @@ export async function GET(req: NextRequest) {
       .from(bookmarks)
       .where(and(eq(bookmarks.userId, user.id), inArray(bookmarks.id, ids)));
 
+    const tagLinks = await db
+      .select({
+        bookmarkId: bookmarkTags.bookmarkId,
+        tagId: tags.id,
+        name: tags.name,
+        kind: tags.kind,
+      })
+      .from(bookmarkTags)
+      .innerJoin(tags, eq(bookmarkTags.tagId, tags.id))
+      .where(inArray(bookmarkTags.bookmarkId, ids));
+    const tagsByBookmark = new Map<
+      string,
+      { id: string; name: string; kind: string }[]
+    >();
+    for (const t of tagLinks) {
+      const list = tagsByBookmark.get(t.bookmarkId) ?? [];
+      list.push({ id: t.tagId, name: t.name, kind: t.kind });
+      tagsByBookmark.set(t.bookmarkId, list);
+    }
+
     const byId = new Map(rows.map((r) => [r.id, r]));
     const results = ids
       .map((id) => byId.get(id))
       .filter(Boolean)
-      .map((b) => ({ ...b, score: scores.get(b!.id) ?? 0 }));
+      .map((b) => ({
+        ...b,
+        tags: tagsByBookmark.get(b!.id) ?? [],
+        score: scores.get(b!.id) ?? 0,
+      }));
 
     return jsonOk({ results });
   } catch (err) {

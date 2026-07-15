@@ -8,7 +8,7 @@ export type IndexJobData = {
   html?: string;
 };
 
-function redisConnection(): ConnectionOptions {
+export function redisConnection(): ConnectionOptions {
   const url = process.env.REDIS_URL ?? "redis://localhost:6379";
   const u = new URL(url);
   return {
@@ -39,8 +39,30 @@ export function getIndexQueue() {
 export async function enqueueIndex(data: IndexJobData) {
   const q = getIndexQueue();
   await q.add("index", data, {
-    jobId: data.html ? `${data.bookmarkId}-manual-${Date.now()}` : data.bookmarkId,
+    jobId: data.html
+      ? `${data.bookmarkId}-manual-${Date.now()}`
+      : `${data.bookmarkId}-${Date.now()}`,
   });
 }
 
-export { redisConnection };
+export async function getQueueStats() {
+  const q = getIndexQueue();
+  const [waiting, active, completed, failed, delayed, paused] =
+    await Promise.all([
+      q.getWaitingCount(),
+      q.getActiveCount(),
+      q.getCompletedCount(),
+      q.getFailedCount(),
+      q.getDelayedCount(),
+      q.isPaused(),
+    ]);
+  return {
+    name: q.name,
+    waiting,
+    active,
+    completed,
+    failed,
+    delayed,
+    paused,
+  };
+}

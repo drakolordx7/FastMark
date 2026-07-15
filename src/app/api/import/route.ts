@@ -1,11 +1,11 @@
 import { NextRequest } from "next/server";
 import { and, eq } from "drizzle-orm";
-import { requireUser } from "@/lib/auth";
+import { requireUser, requireAdmin } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { bookmarks } from "@/lib/db/schema";
-import { canonicalizeUrl, faviconForUrl } from "@/lib/urls";
+import { bookmarks, users } from "@/lib/db/schema";
+import { canonicalizeUrl, faviconForUrl, siteHost } from "@/lib/urls";
 import { enqueueIndex } from "@/lib/queue";
-import { handleRouteError, jsonOk } from "@/lib/api";
+import { handleRouteError, jsonError, jsonOk } from "@/lib/api";
 
 function parseNetscapeBookmarks(html: string): { url: string; title: string }[] {
   const results: { url: string; title: string }[] = [];
@@ -23,18 +23,37 @@ function parseNetscapeBookmarks(html: string): { url: string; title: string }[] 
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await requireUser();
+    const sessionUser = await requireUser();
     const contentType = req.headers.get("content-type") || "";
     let html = "";
+    let targetUserId = sessionUser.id;
     if (contentType.includes("multipart/form-data")) {
       const form = await req.formData();
       const file = form.get("file");
       if (file && typeof file !== "string") {
         html = await file.text();
       }
+      const forUser = form.get("forUserId");
+      if (typeof forUser === "string" && forUser.trim()) {
+        await requireAdmin();
+        targetUserId = forUser.trim();
+        const [target] = await db
+          .select({ id: users.id })
+          .from(users)
+          .where(eq(users.id, targetUserId))
+          .limit(1);
+        if (!target) return jsonError("Target user not found", 404);
+      }
     } else {
-      const body = (await req.json()) as { html?: string };
+      const body = (await req.json()) as {
+        html?: string;
+        forUserId?: string;
+      };
       html = body.html ?? "";
+      if (body.forUserId) {
+        await requireAdmin();
+        targetUserId = body.forUserId;
+      }
     }
 
     const items = parseNetscapeBookmarks(html);
@@ -54,7 +73,7 @@ export async function POST(req: NextRequest) {
         .from(bookmarks)
         .where(
           and(
-            eq(bookmarks.userId, user.id),
+            eq(bookmarks.userId, targetUserId),
             eq(bookmarks.canonicalUrl, canonicalUrl),
           ),
         )
@@ -66,9 +85,10 @@ export async function POST(req: NextRequest) {
       const [created] = await db
         .insert(bookmarks)
         .values({
-          userId: user.id,
+          userId: targetUserId,
           url: item.url,
           canonicalUrl,
+          siteHost: siteHost(canonicalUrl),
           title: item.title,
           faviconUrl: faviconForUrl(canonicalUrl),
           status: "queued",
@@ -76,11 +96,20 @@ export async function POST(req: NextRequest) {
         .returning();
       if (created) {
         imported++;
-        await enqueueIndex({ bookmarkId: created.id, userId: user.id });
+        await enqueueIndex({ bookmarkId: created.id, userId: targetUserId });
       }
     }
 
-    return jsonOk({ imported, skipped, total: items.length });
+    return jsonOk({
+      imported,
+      skipped,
+      total: items.length,
+      targetUserId,
+      scope:
+        targetUserId === sessionUser.id
+          ? "your account only"
+          : "selected user (admin import)",
+    });
   } catch (err) {
     return handleRouteError(err);
   }

@@ -33,6 +33,7 @@ export async function GET() {
         crawlMaxHtmlBytes: sys?.crawlMaxHtmlBytes ?? 2_000_000,
         crawlMaxTextChars: sys?.crawlMaxTextChars ?? 500_000,
         crawlTimeoutMs: sys?.crawlTimeoutMs ?? 20_000,
+        indexConcurrency: sys?.indexConcurrency ?? 4,
         logoUrl: sys?.logoUrl ?? "/logo.svg",
       },
       usage,
@@ -67,6 +68,7 @@ const systemSchema = z.object({
   crawlMaxHtmlBytes: z.coerce.number().int().optional(),
   crawlMaxTextChars: z.coerce.number().int().optional(),
   crawlTimeoutMs: z.coerce.number().int().optional(),
+  indexConcurrency: z.coerce.number().int().min(1).max(16).optional(),
   logoUrl: z.string().optional(),
 });
 
@@ -113,6 +115,7 @@ export async function POST(req: NextRequest) {
         crawlMaxHtmlBytes: raw.crawlMaxHtmlBytes,
         crawlMaxTextChars: raw.crawlMaxTextChars,
         crawlTimeoutMs: raw.crawlTimeoutMs,
+        indexConcurrency: raw.indexConcurrency,
         logoUrl: raw.logoUrl,
       });
       const [sys] = await db.select().from(systemSettings).limit(1);
@@ -140,6 +143,8 @@ export async function POST(req: NextRequest) {
         crawlMaxTextChars:
           body.crawlMaxTextChars ?? sys?.crawlMaxTextChars ?? 500_000,
         crawlTimeoutMs: body.crawlTimeoutMs ?? sys?.crawlTimeoutMs ?? 20_000,
+        indexConcurrency:
+          body.indexConcurrency ?? sys?.indexConcurrency ?? 4,
         logoUrl: body.logoUrl ?? sys?.logoUrl ?? "/logo.svg",
         updatedAt: new Date(),
       };

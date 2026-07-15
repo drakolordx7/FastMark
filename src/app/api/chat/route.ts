@@ -8,12 +8,14 @@ import {
   chatMessages,
   chatSessions,
   collections,
+  tags,
 } from "@/lib/db/schema";
 import type { Proposal } from "@/lib/proposals";
 import {
   createOpenAI,
   resolveAiCredentials,
   checkAndRecordUsage,
+  formatAiProviderError,
 } from "@/lib/ai";
 import { handleRouteError, jsonError, jsonOk } from "@/lib/api";
 
@@ -101,6 +103,7 @@ export async function POST(req: NextRequest) {
         url: bookmarks.url,
         summary: bookmarks.summary,
         collectionId: bookmarks.collectionId,
+        status: bookmarks.status,
       })
       .from(bookmarks)
       .where(eq(bookmarks.userId, user.id))
@@ -111,6 +114,10 @@ export async function POST(req: NextRequest) {
       .select()
       .from(collections)
       .where(eq(collections.userId, user.id));
+    const tagRows = await db
+      .select()
+      .from(tags)
+      .where(eq(tags.userId, user.id));
 
     const client = createOpenAI(creds);
     const system = `You are FastMark organization assistant. User bookmarks are private to them.
@@ -120,25 +127,39 @@ Proposal types:
 - {"type":"add_tag","tag":string,"bookmarkIds":string[]}
 - {"type":"set_favorite","bookmarkIds":string[],"value":boolean}
 - {"type":"set_read_later","bookmarkIds":string[],"value":boolean}
-Only include proposals the user can confirm. Prefer existing bookmark IDs from context.
-Collections: ${JSON.stringify(cols.map((c) => c.name))}
+Prefer EXISTING tags and collections. Only create collections when createIfMissing is true and needed.
+Collections: ${JSON.stringify(cols.map((c) => ({ name: c.name, kind: c.kind })))}
+Existing tags: ${JSON.stringify(tagRows.map((t) => t.name).slice(0, 200))}
 Bookmarks sample: ${JSON.stringify(
       recent.map((b) => ({
         id: b.id,
         title: b.title,
         url: b.url,
+        status: b.status,
         summary: b.summary?.slice(0, 160),
       })),
     )}`;
 
-    const completion = await client.chat.completions.create({
-      model: creds.model,
-      temperature: 0.2,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: body.message },
-      ],
-    });
+    let completion;
+    try {
+      completion = await client.chat.completions.create({
+        model: creds.model,
+        temperature: 0.2,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: body.message },
+        ],
+      });
+    } catch (err) {
+      const content = `AI provider error: ${formatAiProviderError(err)}`;
+      await db.insert(chatMessages).values({
+        sessionId,
+        role: "assistant",
+        content,
+      });
+      return jsonError(content, 502);
+    }
+
     await checkAndRecordUsage(user.id, completion.usage);
 
     const raw = completion.choices[0]?.message?.content ?? "{}";

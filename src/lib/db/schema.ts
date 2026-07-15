@@ -55,6 +55,12 @@ export const userSettings = pgTable("user_settings", {
     .notNull()
     .default("system"),
   logoUrl: text("logo_url"),
+  maxAiTags: integer("max_ai_tags").notNull().default(5),
+  cleanTitles: boolean("clean_titles").notNull().default(true),
+  allowDynamicCollections: boolean("allow_dynamic_collections")
+    .notNull()
+    .default(true),
+  pageSize: integer("page_size").notNull().default(50),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -69,6 +75,7 @@ export const systemSettings = pgTable("system_settings", {
   crawlMaxHtmlBytes: integer("crawl_max_html_bytes").notNull().default(2_000_000),
   crawlMaxTextChars: integer("crawl_max_text_chars").notNull().default(500_000),
   crawlTimeoutMs: integer("crawl_timeout_ms").notNull().default(20_000),
+  indexConcurrency: integer("index_concurrency").notNull().default(4),
   logoUrl: text("logo_url").default("/logo.svg"),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
@@ -99,6 +106,9 @@ export const collections = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     parentId: uuid("parent_id"),
     name: text("name").notNull(),
+    kind: text("kind", { enum: ["static", "dynamic"] })
+      .notNull()
+      .default("static"),
     position: integer("position").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -119,6 +129,9 @@ export const tags = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     normalizedName: text("normalized_name").notNull(),
+    kind: text("kind", { enum: ["static", "dynamic"] })
+      .notNull()
+      .default("dynamic"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -140,6 +153,7 @@ export const bookmarks = pgTable(
     }),
     url: text("url").notNull(),
     canonicalUrl: text("canonical_url").notNull(),
+    siteHost: text("site_host"),
     title: text("title"),
     summary: text("summary"),
     contentText: text("content_text"),
@@ -156,6 +170,8 @@ export const bookmarks = pgTable(
       .notNull()
       .default("queued"),
     error: text("error"),
+    errorKind: text("error_kind"),
+    retryCount: integer("retry_count").notNull().default(0),
     favorite: boolean("favorite").notNull().default(false),
     readLater: boolean("read_later").notNull().default(false),
     suggestedCollection: text("suggested_collection"),
@@ -171,6 +187,7 @@ export const bookmarks = pgTable(
     uniqueIndex("bookmarks_user_canonical_uq").on(t.userId, t.canonicalUrl),
     index("bookmarks_user_status_idx").on(t.userId, t.status),
     index("bookmarks_user_collection_idx").on(t.userId, t.collectionId),
+    index("bookmarks_user_host_idx").on(t.userId, t.siteHost),
   ],
 );
 
@@ -199,6 +216,34 @@ export const embeddings = pgTable("embeddings", {
     .notNull()
     .defaultNow(),
 });
+
+export const orgSuggestions = pgTable(
+  "org_suggestions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    bookmarkId: uuid("bookmark_id").references(() => bookmarks.id, {
+      onDelete: "cascade",
+    }),
+    kind: text("kind", {
+      enum: ["tag", "collection", "rename", "other"],
+    }).notNull(),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    status: text("status", {
+      enum: ["pending", "accepted", "rejected"],
+    })
+      .notNull()
+      .default("pending"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("org_suggestions_user_status_idx").on(t.userId, t.status),
+  ],
+);
 
 export const chatSessions = pgTable("chat_sessions", {
   id: uuid("id").defaultRandom().primaryKey(),

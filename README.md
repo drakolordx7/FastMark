@@ -70,10 +70,24 @@ Configure in **Settings** (per user) and/or **Admin** (global default):
 
 Folder: [`extension/`](extension/)
 
-1. Firefox: `about:debugging` → This Firefox → Load Temporary Add-on → select `extension/manifest.json`
-2. Set your FastMark server URL in the popup (no hardcoded domain)
-3. Sign in with username/password
-4. Use toolbar popup, context menu “Save to FastMark”, or highlight text → “Search FastMark”
+### Firefox (temporary add-on)
+
+1. Open `about:debugging#/runtime/this-firefox`
+2. Click **Load Temporary Add-on…**
+3. Select [`extension/manifest.json`](extension/manifest.json)
+4. Open the toolbar popup, set your FastMark server URL, and sign in
+5. Use toolbar popup, context menu “Save to FastMark”, or highlight text → “Search FastMark”
+
+Temporary add-ons unload when Firefox restarts — reload the manifest after restart.
+
+### Chromium / Chrome
+
+1. Open `chrome://extensions`
+2. Enable **Developer mode**
+3. **Load unpacked** → select the `extension/` folder
+4. Set server URL in the popup and sign in
+
+Bookmark HTML import in **Settings** always imports into **your** account. Admins can import for another user from **Admin → Import bookmarks for a user**.
 
 ## Environment
 

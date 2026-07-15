@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { eq, asc } from "drizzle-orm";
 import { getSessionUser } from "@/lib/auth";
@@ -19,14 +20,17 @@ export default async function AppLayout({
     .orderBy(asc(collections.position), asc(collections.name));
 
   return (
-    <AppShell
-      collections={cols.map((c) => ({
-        id: c.id,
-        name: c.name,
-        parentId: c.parentId,
-      }))}
-    >
-      {children}
-    </AppShell>
+    <Suspense fallback={<div className="p-4 text-sm">Loading…</div>}>
+      <AppShell
+        collections={cols.map((c) => ({
+          id: c.id,
+          name: c.name,
+          parentId: c.parentId,
+          kind: c.kind,
+        }))}
+      >
+        {children}
+      </AppShell>
+    </Suspense>
   );
 }

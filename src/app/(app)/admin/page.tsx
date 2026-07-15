@@ -29,6 +29,7 @@ export default function AdminPage() {
     crawlMaxHtmlBytes: 2_000_000,
     crawlMaxTextChars: 500_000,
     crawlTimeoutMs: 20_000,
+    indexConcurrency: 4,
     logoUrl: "/logo.svg",
   });
   const [globalKey, setGlobalKey] = useState("");
@@ -41,6 +42,11 @@ export default function AdminPage() {
     failed: number;
     delayed: number;
   } | null>(null);
+  const [bookmarkStatuses, setBookmarkStatuses] = useState<Record<string, number>>(
+    {},
+  );
+  const [importUserId, setImportUserId] = useState("");
+  const [importResult, setImportResult] = useState("");
 
   async function load() {
     const res = await fetch("/api/admin");
@@ -54,6 +60,7 @@ export default function AdminPage() {
     setSystem(data.system);
     const q = await fetch("/api/admin/queue").then((r) => r.json());
     if (q.queue) setQueue(q.queue);
+    if (q.bookmarkStatuses) setBookmarkStatuses(q.bookmarkStatuses);
   }
 
   useEffect(() => {
@@ -86,6 +93,7 @@ export default function AdminPage() {
         crawlMaxHtmlBytes: system.crawlMaxHtmlBytes,
         crawlMaxTextChars: system.crawlMaxTextChars,
         crawlTimeoutMs: system.crawlTimeoutMs,
+        indexConcurrency: system.indexConcurrency,
         logoUrl: system.logoUrl,
         globalOpenaiApiKey: globalKey.trim() || undefined,
       }),
@@ -273,6 +281,22 @@ export default function AdminPage() {
             />
           </label>
         </div>
+        <label className="text-sm space-y-1 block">
+          <span>Index worker concurrency (restart worker after change)</span>
+          <input
+            className="fm-input"
+            type="number"
+            min={1}
+            max={16}
+            value={system.indexConcurrency ?? 4}
+            onChange={(e) =>
+              setSystem({
+                ...system,
+                indexConcurrency: Number(e.target.value),
+              })
+            }
+          />
+        </label>
         <input
           className="fm-input"
           placeholder="System logo URL"
@@ -320,9 +344,66 @@ export default function AdminPage() {
             Queue unavailable
           </p>
         )}
+        {Object.keys(bookmarkStatuses).length ? (
+          <div className="text-xs" style={{ color: "var(--muted)" }}>
+            Bookmark statuses:{" "}
+            {Object.entries(bookmarkStatuses)
+              .map(([k, v]) => `${k}=${v}`)
+              .join(" · ")}
+          </div>
+        ) : null}
         <button className="fm-btn" type="button" onClick={() => void load()}>
           Refresh
         </button>
+      </section>
+
+      <section className="fm-card p-5 space-y-3">
+        <h2 className="font-medium">Import bookmarks for a user</h2>
+        <p className="text-xs" style={{ color: "var(--muted)" }}>
+          HTML bookmark imports are scoped to one account. Settings → Import
+          always imports into your own library. Use this admin form to import
+          into another user’s library.
+        </p>
+        <select
+          className="fm-input"
+          value={importUserId}
+          onChange={(e) => setImportUserId(e.target.value)}
+        >
+          <option value="">Select target user…</option>
+          {users.map((u) => (
+            <option key={u.id} value={u.id}>
+              {u.username}
+            </option>
+          ))}
+        </select>
+        <input
+          className="fm-input"
+          type="file"
+          accept=".html,.htm"
+          disabled={!importUserId}
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            if (!file || !importUserId) return;
+            const form = new FormData();
+            form.append("file", file);
+            form.append("forUserId", importUserId);
+            const res = await fetch("/api/import", {
+              method: "POST",
+              body: form,
+            });
+            const data = await res.json().catch(() => ({}));
+            setImportResult(
+              res.ok
+                ? `Imported ${data.imported}, skipped ${data.skipped} (${data.scope})`
+                : data.error || "Import failed",
+            );
+          }}
+        />
+        {importResult ? (
+          <p className="text-sm" style={{ color: "var(--muted)" }}>
+            {importResult}
+          </p>
+        ) : null}
       </section>
 
       <section className="fm-card p-5 space-y-3">

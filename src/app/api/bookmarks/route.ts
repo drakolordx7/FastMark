@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, ne, sql, count } from "drizzle-orm";
 import { z } from "zod";
 import { requireUser, getUserFromToken, AuthError } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -8,7 +8,7 @@ import {
   bookmarks,
   tags,
 } from "@/lib/db/schema";
-import { canonicalizeUrl, faviconForUrl } from "@/lib/urls";
+import { canonicalizeUrl, faviconForUrl, siteHost } from "@/lib/urls";
 import { enqueueIndex } from "@/lib/queue";
 import { handleRouteError, jsonError, jsonOk } from "@/lib/api";
 
@@ -29,38 +29,88 @@ export async function GET(req: NextRequest) {
     const view = sp.get("view");
     const collectionId = sp.get("collectionId");
     const tagId = sp.get("tagId");
+    const status = sp.get("status");
     const q = sp.get("q")?.trim();
+    const page = Math.max(1, Number(sp.get("page") || 1));
+    const pageSize = Math.min(100, Math.max(10, Number(sp.get("pageSize") || 50)));
 
     const conditions = [eq(bookmarks.userId, user.id)];
     if (view === "favorites") conditions.push(eq(bookmarks.favorite, true));
     if (view === "read_later") conditions.push(eq(bookmarks.readLater, true));
     if (view === "manual")
       conditions.push(eq(bookmarks.status, "needs_manual_index"));
+    if (view === "queued") conditions.push(eq(bookmarks.status, "queued"));
+    if (view === "indexing") conditions.push(eq(bookmarks.status, "indexing"));
+    if (view === "failed") conditions.push(eq(bookmarks.status, "failed"));
+    if (view === "ready") conditions.push(eq(bookmarks.status, "ready"));
+    // Default All: hide queued / indexing noise unless explicitly requested
+    if (!view && !status) {
+      conditions.push(ne(bookmarks.status, "queued"));
+      conditions.push(ne(bookmarks.status, "indexing"));
+    }
+    if (status) {
+      conditions.push(
+        eq(
+          bookmarks.status,
+          status as
+            | "queued"
+            | "indexing"
+            | "ready"
+            | "needs_manual_index"
+            | "failed",
+        ),
+      );
+    }
     if (collectionId)
       conditions.push(eq(bookmarks.collectionId, collectionId));
 
-    let rows = await db
-      .select()
-      .from(bookmarks)
-      .where(and(...conditions))
-      .orderBy(desc(bookmarks.createdAt))
-      .limit(500);
-
+    let idFilter: string[] | null = null;
     if (tagId) {
       const links = await db
         .select()
         .from(bookmarkTags)
         .where(eq(bookmarkTags.tagId, tagId));
-      const ids = new Set(links.map((l) => l.bookmarkId));
-      rows = rows.filter((b) => ids.has(b.id));
+      idFilter = links.map((l) => l.bookmarkId);
+      if (!idFilter.length) {
+        return jsonOk({
+          bookmarks: [],
+          page,
+          pageSize,
+          total: 0,
+          totalPages: 0,
+        });
+      }
+      conditions.push(inArray(bookmarks.id, idFilter));
     }
 
     if (q) {
-      rows = rows.filter((b) => {
-        const hay = `${b.title ?? ""} ${b.summary ?? ""} ${b.url} ${b.contentText ?? ""}`.toLowerCase();
-        return hay.includes(q.toLowerCase()) || b.url.toLowerCase().includes(q.toLowerCase());
-      });
+      const needle = `%${q.toLowerCase()}%`;
+      conditions.push(
+        sql`(
+          lower(coalesce(${bookmarks.title}, '')) like ${needle}
+          OR lower(coalesce(${bookmarks.summary}, '')) like ${needle}
+          OR lower(${bookmarks.url}) like ${needle}
+          OR lower(coalesce(${bookmarks.contentText}, '')) like ${needle}
+        )`,
+      );
     }
+
+    const where = and(...conditions);
+    const [totalRow] = await db
+      .select({ value: count() })
+      .from(bookmarks)
+      .where(where);
+    const total = Number(totalRow?.value ?? 0);
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const offset = (page - 1) * pageSize;
+
+    const rows = await db
+      .select()
+      .from(bookmarks)
+      .where(where)
+      .orderBy(desc(bookmarks.createdAt))
+      .limit(pageSize)
+      .offset(offset);
 
     const ids = rows.map((r) => r.id);
     const tagLinks =
@@ -71,15 +121,19 @@ export async function GET(req: NextRequest) {
               bookmarkId: bookmarkTags.bookmarkId,
               tagId: tags.id,
               name: tags.name,
+              kind: tags.kind,
             })
             .from(bookmarkTags)
             .innerJoin(tags, eq(bookmarkTags.tagId, tags.id))
             .where(inArray(bookmarkTags.bookmarkId, ids));
 
-    const byBookmark = new Map<string, { id: string; name: string }[]>();
+    const byBookmark = new Map<
+      string,
+      { id: string; name: string; kind: string }[]
+    >();
     for (const t of tagLinks) {
       const list = byBookmark.get(t.bookmarkId) ?? [];
-      list.push({ id: t.tagId, name: t.name });
+      list.push({ id: t.tagId, name: t.name, kind: t.kind });
       byBookmark.set(t.bookmarkId, list);
     }
 
@@ -88,6 +142,10 @@ export async function GET(req: NextRequest) {
         ...b,
         tags: byBookmark.get(b.id) ?? [],
       })),
+      page,
+      pageSize,
+      total,
+      totalPages,
     });
   } catch (err) {
     return handleRouteError(err);
@@ -134,6 +192,7 @@ export async function POST(req: NextRequest) {
         userId: user.id,
         url: body.url.trim(),
         canonicalUrl,
+        siteHost: siteHost(canonicalUrl),
         title: body.title?.trim() || null,
         collectionId: body.collectionId ?? null,
         favorite: body.favorite ?? false,

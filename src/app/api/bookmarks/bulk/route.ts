@@ -84,7 +84,12 @@ export async function POST(req: NextRequest) {
         if (!tag) {
           [tag] = await db
             .insert(tags)
-            .values({ userId: user.id, name, normalizedName })
+            .values({
+              userId: user.id,
+              name,
+              normalizedName,
+              kind: "static",
+            })
             .returning();
         }
         if (tag) {

@@ -87,8 +87,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
               userId: user.id,
               name: name.trim(),
               normalizedName,
+              kind: "static",
             })
             .returning();
+        } else if (tag.kind !== "static") {
+          await db
+            .update(tags)
+            .set({ kind: "static" })
+            .where(eq(tags.id, tag.id));
         }
         if (tag) {
           await db

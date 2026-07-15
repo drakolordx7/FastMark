@@ -8,6 +8,9 @@ import {
   users,
 } from "./db/schema";
 import { decryptSecret, localEmbedding } from "./crypto";
+import { formatAiProviderError } from "./ai-errors";
+
+export { formatAiProviderError };
 
 export type AiCredentials = {
   baseUrl: string;
@@ -53,7 +56,37 @@ export function createOpenAI(creds: AiCredentials) {
   return new OpenAI({
     apiKey: creds.apiKey,
     baseURL: creds.baseUrl.replace(/\/$/, ""),
+    timeout: 60_000,
+    maxRetries: 1,
   });
+}
+
+export async function testAiConnection(userId: string) {
+  const creds = await resolveAiCredentials(userId);
+  if (!creds) {
+    return { ok: false as const, error: "Missing base URL or API key" };
+  }
+  if (!creds.model) {
+    return { ok: false as const, error: "No chat model configured" };
+  }
+  try {
+    const client = createOpenAI(creds);
+    const completion = await client.chat.completions.create({
+      model: creds.model,
+      temperature: 0,
+      max_tokens: 16,
+      messages: [
+        { role: "system", content: "Reply with OK only." },
+        { role: "user", content: "ping" },
+      ],
+    });
+    const text = completion.choices[0]?.message?.content?.trim() || "";
+    return { ok: true as const, reply: text || "OK", model: creds.model };
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "AI provider request failed";
+    return { ok: false as const, error: message };
+  }
 }
 
 function dayKey(timezone: string) {
@@ -122,13 +155,19 @@ export type IndexAiResult = {
   summary: string;
   tags: string[];
   collectionHint: string | null;
+  createCollection?: string | null;
 };
 
 export async function summarizeAndTag(
   userId: string,
   title: string,
   text: string,
-  collectionNames: string[],
+  opts: {
+    collectionNames: string[];
+    existingTags: string[];
+    maxTags: number;
+    allowDynamicCollections: boolean;
+  },
 ): Promise<IndexAiResult> {
   const creds = await resolveAiCredentials(userId);
   if (!creds?.model) {
@@ -139,9 +178,17 @@ export async function summarizeAndTag(
     };
   }
 
+  const maxTags = Math.max(0, Math.min(5, opts.maxTags));
   const client = createOpenAI(creds);
-  const prompt = `You organize bookmarks. Given a page title and content, return JSON only with keys:
-summary (2-4 sentences), tags (3-8 short strings), collectionHint (one of ${JSON.stringify(collectionNames)} or null).
+  const prompt = `You organize bookmarks. Prefer EXISTING tags and collections for consistency.
+Return JSON only with keys:
+summary (2-4 sentences),
+tags (0-${maxTags} short strings; reuse existing tags when possible),
+collectionHint (one of ${JSON.stringify(opts.collectionNames)} or null),
+createCollection (only if allowDynamicCollections and no good match: short new name or null).
+
+Existing tags: ${JSON.stringify(opts.existingTags.slice(0, 200))}
+Allow new collections: ${opts.allowDynamicCollections}
 
 Title: ${title}
 Content:
@@ -152,7 +199,7 @@ ${text.slice(0, 12000)}`;
     messages: [
       {
         role: "system",
-        content: "Return valid JSON only. No markdown.",
+        content: "Return valid JSON only. No markdown. Reuse existing tags whenever reasonable.",
       },
       { role: "user", content: prompt },
     ],
@@ -168,13 +215,18 @@ ${text.slice(0, 12000)}`;
       summary?: string;
       tags?: string[];
       collectionHint?: string | null;
+      createCollection?: string | null;
     };
+    const tags = Array.isArray(parsed.tags)
+      ? parsed.tags.map((t) => String(t).trim()).filter(Boolean).slice(0, maxTags)
+      : [];
     return {
       summary: parsed.summary?.trim() || text.slice(0, 400),
-      tags: Array.isArray(parsed.tags)
-        ? parsed.tags.map((t) => String(t).trim()).filter(Boolean).slice(0, 12)
-        : [],
+      tags,
       collectionHint: parsed.collectionHint?.trim() || null,
+      createCollection: opts.allowDynamicCollections
+        ? parsed.createCollection?.trim() || null
+        : null,
     };
   } catch {
     return {
@@ -197,7 +249,6 @@ export async function embedText(userId: string, text: string): Promise<number[]>
       await checkAndRecordUsage(userId, res.usage);
       const vec = res.data[0]?.embedding;
       if (vec?.length) {
-        // Pad/truncate to 384 for storage compatibility
         if (vec.length === 384) return vec;
         if (vec.length > 384) return vec.slice(0, 384);
         return [...vec, ...new Array(384 - vec.length).fill(0)];

@@ -68,7 +68,7 @@ select {
 .fm-card {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 10px;
   box-shadow: var(--shadow);
 }
 
@@ -76,13 +76,14 @@ select {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.4rem;
-  border-radius: 8px;
+  gap: 0.35rem;
+  border-radius: 7px;
   border: 1px solid var(--border);
   background: var(--bg-elevated);
   color: var(--fg);
-  padding: 0.45rem 0.8rem;
+  padding: 0.35rem 0.65rem;
   cursor: pointer;
+  font-size: 0.875rem;
 }
 
 .fm-btn:hover {
@@ -104,16 +105,29 @@ select {
   border: 1px solid var(--border);
   background: var(--bg-elevated);
   color: var(--fg);
-  border-radius: 8px;
-  padding: 0.55rem 0.75rem;
+  border-radius: 7px;
+  padding: 0.45rem 0.65rem;
+}
+
+.fm-input-sm {
+  padding: 0.35rem 0.55rem;
+  font-size: 0.875rem;
 }
 
 .fm-chip {
   display: inline-flex;
   align-items: center;
   border-radius: 999px;
-  padding: 0.15rem 0.55rem;
+  padding: 0.1rem 0.45rem;
   background: var(--accent-soft);
   color: var(--accent);
-  font-size: 0.75rem;
+  font-size: 0.7rem;
+  line-height: 1.2;
+}
+
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }

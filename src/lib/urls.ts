@@ -32,6 +32,28 @@ export function canonicalizeUrl(raw: string): string {
   return url.toString();
 }
 
+export function siteHost(url: string): string {
+  try {
+    return new URL(canonicalizeUrl(url)).hostname;
+  } catch {
+    return "";
+  }
+}
+
+export function pathDepth(url: string): number {
+  try {
+    const path = new URL(canonicalizeUrl(url)).pathname.replace(/\/+$/, "");
+    if (!path || path === "/") return 0;
+    return path.split("/").filter(Boolean).length;
+  } catch {
+    return 0;
+  }
+}
+
+export function isTopLevelUrl(url: string): boolean {
+  return pathDepth(url) === 0;
+}
+
 export function faviconForUrl(url: string): string {
   try {
     const u = new URL(url);

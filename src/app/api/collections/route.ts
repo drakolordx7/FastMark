@@ -33,6 +33,7 @@ export async function GET(req: NextRequest) {
 const createSchema = z.object({
   name: z.string().min(1).max(120),
   parentId: z.string().uuid().nullable().optional(),
+  kind: z.enum(["static", "dynamic"]).optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -45,6 +46,7 @@ export async function POST(req: NextRequest) {
         userId: user.id,
         name: body.name.trim(),
         parentId: body.parentId ?? null,
+        kind: body.kind ?? "static",
       })
       .returning();
     return jsonOk({ collection: created }, { status: 201 });
@@ -58,6 +60,7 @@ const patchSchema = z.object({
   name: z.string().min(1).optional(),
   parentId: z.string().uuid().nullable().optional(),
   position: z.number().int().optional(),
+  kind: z.enum(["static", "dynamic"]).optional(),
 });
 
 export async function PATCH(req: NextRequest) {
@@ -70,6 +73,7 @@ export async function PATCH(req: NextRequest) {
         ...(body.name ? { name: body.name.trim() } : {}),
         ...(body.parentId !== undefined ? { parentId: body.parentId } : {}),
         ...(body.position !== undefined ? { position: body.position } : {}),
+        ...(body.kind ? { kind: body.kind } : {}),
       })
       .where(and(eq(collections.id, body.id), eq(collections.userId, user.id)))
       .returning();

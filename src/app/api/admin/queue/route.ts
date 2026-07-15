@@ -1,27 +1,29 @@
 import { requireAdmin } from "@/lib/auth";
-import { getIndexQueue } from "@/lib/queue";
+import { getQueueStats } from "@/lib/queue";
+import { db } from "@/lib/db";
+import { bookmarks, systemSettings } from "@/lib/db/schema";
+import { sql } from "drizzle-orm";
 import { handleRouteError, jsonOk } from "@/lib/api";
 
 export async function GET() {
   try {
     await requireAdmin();
-    const queue = getIndexQueue();
-    const [waiting, active, completed, failed, delayed] = await Promise.all([
-      queue.getWaitingCount(),
-      queue.getActiveCount(),
-      queue.getCompletedCount(),
-      queue.getFailedCount(),
-      queue.getDelayedCount(),
-    ]);
+    const queue = await getQueueStats();
+    const [sys] = await db.select().from(systemSettings).limit(1);
+    const statusCounts = await db
+      .select({
+        status: bookmarks.status,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(bookmarks)
+      .groupBy(bookmarks.status);
+
     return jsonOk({
-      queue: {
-        name: queue.name,
-        waiting,
-        active,
-        completed,
-        failed,
-        delayed,
-      },
+      queue,
+      indexConcurrency: sys?.indexConcurrency ?? 4,
+      bookmarkStatuses: Object.fromEntries(
+        statusCounts.map((r) => [r.status, r.count]),
+      ),
     });
   } catch (err) {
     return handleRouteError(err);
