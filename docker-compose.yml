@@ -25,17 +25,6 @@ services:
       timeout: 3s
       retries: 10
 
-  migrate:
-    build: .
-    command: ["npx", "tsx", "src/lib/db/migrate.ts"]
-    environment:
-      DATABASE_URL: postgres://fastmark:fastmark@postgres:5432/fastmark
-      ENCRYPTION_SECRET: ${ENCRYPTION_SECRET:-dev-encryption-secret-change-me}
-      AUTH_SECRET: ${AUTH_SECRET:-dev-auth-secret-change-me}
-    depends_on:
-      postgres:
-        condition: service_healthy
-
   web:
     build: .
     ports:
@@ -50,8 +39,6 @@ services:
     volumes:
       - fastmark_uploads:/app/public/uploads
     depends_on:
-      migrate:
-        condition: service_completed_successfully
       redis:
         condition: service_healthy
       postgres:
@@ -59,15 +46,13 @@ services:
 
   worker:
     build: .
-    command: ["npx", "tsx", "src/worker/index.ts"]
+    command: ["./docker-entrypoint-worker.sh"]
     environment:
       DATABASE_URL: postgres://fastmark:fastmark@postgres:5432/fastmark
       REDIS_URL: redis://redis:6379
       ENCRYPTION_SECRET: ${ENCRYPTION_SECRET:-dev-encryption-secret-change-me}
       AUTH_SECRET: ${AUTH_SECRET:-dev-auth-secret-change-me}
     depends_on:
-      migrate:
-        condition: service_completed_successfully
       redis:
         condition: service_healthy
       postgres:

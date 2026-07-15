@@ -1,0 +1,219 @@
+name: "FastMark"
+services:
+  fastmark:
+    cpu_shares: 90
+    command: []
+    container_name: fastmark
+    depends_on:
+      fastmark-db:
+        condition: service_healthy
+        restart: true
+        required: true
+      fastmark-redis:
+        condition: service_healthy
+        restart: true
+        required: true
+    deploy:
+      resources:
+        limits:
+          memory: 2147483648
+        reservations:
+          memory: "268435456"
+          devices: []
+    environment:
+      - DATABASE_URL=postgres://fastmark:casaos@fastmark-db:5432/fastmark
+      - REDIS_URL=redis://fastmark-redis:6379
+      - APP_URL=https://bookmarks.example.com
+      - COOKIE_SECURE=auto
+      - ENCRYPTION_SECRET=change-me-to-a-long-random-string
+      - AUTH_SECRET=change-me-to-another-long-random-string
+    image: ghcr.io/drakolordx7/fastmark:latest
+    labels:
+      icon: https://raw.githubusercontent.com/drakolordx7/FastMark/main/public/logo.svg
+    ports:
+      - mode: ingress
+        target: 3000
+        published: "3030"
+        protocol: tcp
+    privileged: false
+    restart: unless-stopped
+    volumes:
+      - type: bind
+        source: /DATA/AppData/fastmark/uploads
+        target: /app/public/uploads
+        bind:
+          create_host_path: true
+    devices: []
+    cap_add: []
+    networks:
+      - fastmark-network
+  fastmark-worker:
+    cpu_shares: 90
+    command:
+      - ./docker-entrypoint-worker.sh
+    container_name: fastmark-worker
+    depends_on:
+      fastmark-db:
+        condition: service_healthy
+        restart: true
+        required: true
+      fastmark-redis:
+        condition: service_healthy
+        restart: true
+        required: true
+    deploy:
+      resources:
+        limits:
+          memory: 2147483648
+        reservations:
+          memory: "268435456"
+          devices: []
+    environment:
+      - DATABASE_URL=postgres://fastmark:casaos@fastmark-db:5432/fastmark
+      - REDIS_URL=redis://fastmark-redis:6379
+      - ENCRYPTION_SECRET=change-me-to-a-long-random-string
+      - AUTH_SECRET=change-me-to-another-long-random-string
+    image: ghcr.io/drakolordx7/fastmark:latest
+    labels:
+      icon: https://raw.githubusercontent.com/drakolordx7/FastMark/main/public/logo.svg
+    restart: unless-stopped
+    volumes: []
+    ports: []
+    devices: []
+    cap_add: []
+    networks:
+      - fastmark-network
+    privileged: false
+  fastmark-db:
+    cpu_shares: 90
+    command: []
+    container_name: fastmark-db
+    deploy:
+      resources:
+        limits:
+          memory: 2147483648
+        reservations:
+          devices: []
+    environment:
+      - POSTGRES_DB=fastmark
+      - POSTGRES_PASSWORD=casaos
+      - POSTGRES_USER=fastmark
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U fastmark -d fastmark
+      timeout: 5s
+      interval: 10s
+      retries: 5
+      start_period: 20s
+    image: pgvector/pgvector:pg16
+    labels:
+      icon: https://raw.githubusercontent.com/drakolordx7/FastMark/main/public/logo.svg
+    restart: unless-stopped
+    volumes:
+      - type: bind
+        source: /DATA/AppData/fastmark/postgres
+        target: /var/lib/postgresql/data
+        bind:
+          create_host_path: true
+    ports: []
+    devices: []
+    cap_add: []
+    networks:
+      - fastmark-network
+    privileged: false
+  fastmark-redis:
+    cpu_shares: 90
+    command: []
+    container_name: fastmark-redis
+    deploy:
+      resources:
+        limits:
+          memory: 536870912
+        reservations:
+          devices: []
+    healthcheck:
+      test:
+        - CMD
+        - redis-cli
+        - ping
+      timeout: 3s
+      interval: 10s
+      retries: 5
+      start_period: 5s
+    image: redis:7-alpine
+    labels:
+      icon: https://raw.githubusercontent.com/drakolordx7/FastMark/main/public/logo.svg
+    restart: unless-stopped
+    volumes:
+      - type: bind
+        source: /DATA/AppData/fastmark/redis
+        target: /data
+        bind:
+          create_host_path: true
+    ports: []
+    devices: []
+    cap_add: []
+    networks:
+      - fastmark-network
+    privileged: false
+networks:
+  fastmark-network:
+    name: fastmark_fastmark-network
+    driver: bridge
+x-casaos:
+  architectures:
+    - amd64
+    - arm64
+  author: drakolordx7
+  category: Productivity
+  description:
+    en_US: >
+      FastMark is a self-hosted multi-user AI bookmark organizer. Save pages from
+      the web UI or browser extension, crawl and index content, generate summaries
+      and tags through an OpenAI-compatible proxy, search with hybrid full-text and
+      vector search, and reorganize your library with a confirm-to-apply AI chat.
+
+
+      Core features include private per-user libraries, nested collections, dynamic
+      tags, favorites and read-later, manual reindexing, a Needs Manual Index path
+      when crawls fail, HTML bookmark import, and admin controls for users, crawl
+      limits, usage stats, and a global AI default.
+
+
+      **Key Features:**
+
+      - Index and summarize bookmarks via OpenAI-compatible APIs (e.g. Gemini Flash proxy)
+
+      - Collections, tags, favorites, and read later
+
+      - Hybrid full-text + semantic search
+
+      - AI organization chat with confirm-before-apply actions
+
+      - Firefox/Chromium extension for save, context menu, and highlight search
+
+      - Import Firefox/Chrome bookmark HTML exports
+
+      - Multi-user with admin-created accounts
+
+
+      **Learn More:**
+
+      - [FastMark GitHub Repository](https://github.com/drakolordx7/FastMark)
+  developer: drakolordx7
+  hostname: ""
+  icon: https://raw.githubusercontent.com/drakolordx7/FastMark/main/public/logo.svg
+  index: ""
+  is_uncontrolled: false
+  main: fastmark
+  port_map: "3030"
+  scheme: https
+  screenshot_link: []
+  store_app_id: fastmark
+  tagline:
+    en_US: Self-hosted AI bookmark manager with indexing, tags, and chat.
+  thumbnail: ""
+  title:
+    custom: ""
+    en_US: FastMark

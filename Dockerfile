@@ -24,7 +24,10 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/src ./src
 COPY --from=builder /app/tsconfig.json ./
 COPY --from=builder /app/next.config.ts ./
-RUN mkdir -p public/uploads && chown -R node:node /app
+COPY docker-entrypoint-web.sh docker-entrypoint-worker.sh ./
+RUN chmod +x docker-entrypoint-web.sh docker-entrypoint-worker.sh \
+  && mkdir -p public/uploads \
+  && chown -R node:node /app
 USER node
 EXPOSE 3000
-CMD ["npm", "run", "start"]
+CMD ["./docker-entrypoint-web.sh"]
