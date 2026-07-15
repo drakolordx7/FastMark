@@ -1,9 +1,8 @@
 import { client } from "./index";
 
 async function migrate() {
-  await client`
-    CREATE EXTENSION IF NOT EXISTS vector;
-  `;
+  await client`CREATE EXTENSION IF NOT EXISTS vector;`;
+  await client`CREATE EXTENSION IF NOT EXISTS pgcrypto;`;
 
   await client`
     CREATE TABLE IF NOT EXISTS users (
